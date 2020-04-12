@@ -4,7 +4,7 @@ using System.Text;
 
 namespace TamrielTradeCentreScraper
 {
-    class TamrielLocation
+    public class TamrielLocation
     {
         public string Province { get; set; }
         public string City { get; set; }
