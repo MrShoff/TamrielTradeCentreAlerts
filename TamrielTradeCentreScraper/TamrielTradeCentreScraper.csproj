@@ -37,6 +37,7 @@
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Drawing" />
+    <Reference Include="System.Web" />
     <Reference Include="System.Xml.Linq" />
     <Reference Include="System.Data.DataSetExtensions" />
     <Reference Include="Microsoft.CSharp" />
@@ -49,11 +50,20 @@
     <Compile Include="Result.cs" />
     <Compile Include="SearchResultsScraper.cs" />
     <Compile Include="TamrielLocation.cs" />
+    <Compile Include="Watcher.cs" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\LibAlerts\LibAlerts.csproj">
+      <Project>{F9AFD7BE-04BE-4CB4-AF1F-42C50F06060C}</Project>
+      <Name>LibAlerts</Name>
+    </ProjectReference>
     <ProjectReference Include="..\SiteScraper\SiteScraper.csproj">
       <Project>{677902E2-AC4F-48BB-BE38-B19DD1E4BF36}</Project>
       <Name>SiteScraper</Name>
+    </ProjectReference>
+    <ProjectReference Include="E:\Development\Visual Studio 2019\source\repos\Wolcen_ZeitgeistFarmer\InputHelperLibrary\InputHelperLibrary.csproj">
+      <Project>{A22FC900-CFB3-4521-98A0-257D02461944}</Project>
+      <Name>InputHelperLibrary</Name>
     </ProjectReference>
   </ItemGroup>
   <ItemGroup>

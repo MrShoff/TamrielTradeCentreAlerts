@@ -19,7 +19,7 @@ namespace TamrielTradeCentreScraper
 
         public override string ToString()
         {
-            return $"Price: {PricePerUnit}x{StackSize} Location: {Location.City} ({Location.Province}) Shop Owner: {ShopOwner}; Last Seen: {(DateTime.Now - LastSeen).TotalMinutes}";
+            return $"Price: {PricePerUnit}x{StackSize} Location: {Location.City} ({Location.Province}) Shop Owner: {ShopOwner}; Last Seen: {(int)(DateTime.Now - LastSeen).TotalMinutes} minutes ago";
         }
     }
 }

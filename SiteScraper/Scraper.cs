@@ -24,7 +24,7 @@ namespace SiteScraper
             }
             catch
             {
-                Console.WriteLine($"Nothing found at {xPath}");
+                //Console.WriteLine($"Nothing found at {xPath}");
             }
             return null;
         }
@@ -39,7 +39,7 @@ namespace SiteScraper
             }
             catch
             {
-                Console.WriteLine($"Nothing found at {xPath}");
+                //Console.WriteLine($"Nothing found at {xPath}");
             }
             return null;
         }
@@ -54,7 +54,7 @@ namespace SiteScraper
             }
             catch
             {
-                Console.WriteLine($"Nothing found at {xPath}");
+                //Console.WriteLine($"Nothing found at {xPath}");
             }
             return null;
         }

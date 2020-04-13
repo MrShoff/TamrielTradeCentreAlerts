@@ -1,33 +1,107 @@
 ﻿using HtmlAgilityPack;
+using InputHelperLibrary;
+using LibAlerts;
 using SiteScraper;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
+using System.Threading;
 using static SiteScraper.HtmlNodeField;
 
 namespace TamrielTradeCentreScraper
 {
     public static class SearchResultsScraper
     {
-        public static IEnumerable<Result> Scrape(string url, int maxResultCount = 25)
+        public static IEnumerable<Result> Scrape(string url, int maxResultCount = 40, int scrapeDelayMs = 0)
         {
             List<Result> results = new List<Result>();
 
-            if (Uri.TryCreate(url, UriKind.Absolute, out Uri searchUri))
+            // get top results from both directions, since you can only order by max price
+            /*
+            string urlAsc, urlDesc;
+            if (url.Contains("&SortBy=Price&Order="))
             {
-                var doc = Scraper.GetHtmlDoc(searchUri);
+                if (url.Contains("&SortBy=Price&Order=asc"))
+                {
+                    urlAsc = url;
+                    urlDesc = url.Replace("&SortBy=Price&Order=asc", "&SortBy=Price&Order=desc");
+                }
+                else if (url.Contains("&SortBy=Price&Order=desc"))
+                {
+
+                    urlAsc = url.Replace("&SortBy=Price&Order=desc", "&SortBy=Price&Order=asc");
+                    urlDesc = url;
+                }
+                else
+                {
+                    throw new Exception("wtf?");
+                }
+            }
+            else
+            {
+                urlAsc = $"{url}&SortBy=Price&Order=asc";
+                urlDesc = $"{url}&SortBy=Price&Order=desc";
+            }
+            */
+
+            if (!url.Contains("&SortBy=Price&Order=asc")) { url = $"{url}&SortBy=Price&Order=asc"; }
+
+            if (Uri.TryCreate(url, UriKind.Absolute, out Uri searchUriAsc))
+            {
                 var searchResultsNodesXPath = "/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/table/tbody";
-                var searchResultNodes = Scraper.GetChildNodes(doc, searchResultsNodesXPath);
+                int delay = 0;
+                if (scrapeDelayMs > 0)
+                {
+                    int pagesToScrape = maxResultCount / 10;
+                    delay = pagesToScrape > 0 ? scrapeDelayMs / pagesToScrape : scrapeDelayMs;
+                    //Console.ForegroundColor = ConsoleColor.DarkGray;
+                    //Console.WriteLine($"{pagesToScrape} pages to scrape. Delaying each call in this search by {delay.ToString("#,##0")}ms.");
+                    //Console.ResetColor();
+                }
+                Thread.Sleep(delay);
+                var docAsc = Scraper.GetHtmlDoc(searchUriAsc);
+                var searchResultNodesAsc = Scraper.GetChildNodes(docAsc, searchResultsNodesXPath);
+
+                if (searchResultNodesAsc == null)
+                {
+                    string captchaXpath = "/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/form/div/div";
+                    var captchaNode = Scraper.GetNode(docAsc, captchaXpath);
+                    if (captchaNode != null)
+                    {
+                        if (AttemptRoboCaptcha(captchaNode, url))
+                        {
+                            Scrape(url, maxResultCount, scrapeDelayMs);
+                        }
+                    }
+                    return results;
+                }
+
+                List<HtmlNode> nodesToParse = new List<HtmlNode>();
+                nodesToParse.AddRange(from srn in searchResultNodesAsc where srn.GetClasses().Contains("cursor-pointer") select srn);
+
+                /*
+                if (maxResultCount > 10 && nodesToParse.Count == 10)
+                {
+                    Thread.Sleep(delay);
+                    var docDesc = Scraper.GetHtmlDoc(searchUriDesc);
+                    var searchResultNodesDesc = Scraper.GetChildNodes(docAsc, searchResultsNodesXPath);
+                    nodesToParse.AddRange(from srn in searchResultNodesDesc where srn.GetClasses().Contains("cursor-pointer") select srn);
+                }
+                */
+
+                if (nodesToParse.Count > maxResultCount) 
+                { 
+                    nodesToParse.RemoveRange((nodesToParse.Count / 2) - ((nodesToParse.Count - maxResultCount) / 2), nodesToParse.Count - maxResultCount); 
+                }
 
                 var fieldsWereInterestedIn = GetFieldSet();
-                foreach(var field in fieldsWereInterestedIn) // remove parent node path from field path
+                foreach (var field in fieldsWereInterestedIn) // remove parent node path from field path
                 {
                     string updatedPath = field.xPath.Replace(searchResultsNodesXPath, "");
                     field.xPath = updatedPath;
                 }
-                var nodesToParse = from srn in searchResultNodes where srn.GetClasses().Contains("cursor-pointer") select srn;
-                if (nodesToParse.Count() > maxResultCount) { nodesToParse = nodesToParse.Take(maxResultCount); }
                 foreach (var node in nodesToParse)
                 {
                     if (node != null)
@@ -37,10 +111,10 @@ namespace TamrielTradeCentreScraper
                     }
                 }
 
-                if (results.Count < maxResultCount)
+                if (results.Count < maxResultCount && results.Count == 10)
                 {
                     // check for more pages of results
-                    var paginationNodes = Scraper.GetChildNodes(doc, "/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/div[3]/ul");
+                    var paginationNodes = Scraper.GetChildNodes(docAsc, "/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/div[3]/ul");
                     foreach (var lineItemNode in paginationNodes) // look at all LIs
                     {
                         if (lineItemNode.HasChildNodes)
@@ -51,7 +125,8 @@ namespace TamrielTradeCentreScraper
                                 {
                                     if (childNode.Attributes.Contains("href"))
                                     {
-                                        results.AddRange(Scrape(childNode.Attributes["href"].Value, maxResultCount - results.Count));
+                                        string nextPageUrl = childNode.Attributes["href"].Value.Replace("amp;", "");
+                                        results.AddRange(Scrape(nextPageUrl, maxResultCount - results.Count, scrapeDelayMs - delay));
                                     }
                                 }
                             }
@@ -65,6 +140,26 @@ namespace TamrielTradeCentreScraper
             {
                 throw new ArgumentException($"Could not create Uri from {url}", nameof(url));
             }
+        }
+
+        private static bool AttemptRoboCaptcha(HtmlNode captchaNode, string url)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            Console.WriteLine($"{DateTime.Now} Opening chrome.exe for CAPTCHA");
+            Console.ResetColor();
+            var process = Process.Start(@"chrome.exe", url);
+            new VoiceSynth().Speak("CAPTCHA time");
+            Thread.Sleep(10000);
+            //var firefoxProcess = Process.GetProcessesByName("firefox").FirstOrDefault();
+            //WindowsAPI.SwitchWindow(Process.GetCurrentProcess().MainWindowHandle);
+            //MouseHelper.SendMouseClickForeground(firefoxProcess.MainWindowHandle, 3348, 328);// 791, 333); 
+            //Thread.Sleep(2000);
+            //MouseHelper.SendMouseClickForeground(firefoxProcess.MainWindowHandle, 3354, 400);// 798, 408);
+            //MouseHelper.SendMouseClick(firefoxProcess.MainWindowHandle, 3348, 328);// 791, 333); 
+            //Thread.Sleep(3000);
+            //MouseHelper.SendMouseClick(firefoxProcess.MainWindowHandle, 3354, 400);// 798, 408);
+            //Thread.Sleep(1000);
+            return true;
         }
 
         private static Result ReadFieldSet(IEnumerable<HtmlNodeField> fieldSet)
@@ -87,13 +182,13 @@ namespace TamrielTradeCentreScraper
                     case "Item Name":
                         if (textStrings != null)
                         {
-                            ttcResult.Name = textStrings.Length > 0 ? textStrings[0] : string.Empty;
+                            ttcResult.Name = textStrings.Length > 0 ? System.Web.HttpUtility.HtmlDecode(textStrings[0]) : string.Empty;
                         }
                         break;
                     case "Trader":
                         if (textStrings != null)
                         {
-                            ttcResult.Trader = textStrings.Length > 0 ? textStrings[0] : string.Empty;
+                            ttcResult.Trader = textStrings.Length > 0 ? System.Web.HttpUtility.HtmlDecode(textStrings[0]) : string.Empty;
                         }
                         break;
                     case "Location":

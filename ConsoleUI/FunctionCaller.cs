@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LibAlerts;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -11,33 +12,58 @@ namespace ConsoleUI
 {
     class FunctionCaller
     {
+        TimeSpan searchInterval = TimeSpan.FromSeconds(300);
+        VoiceSynth voice = new VoiceSynth();
+
         public void CallSiteScraper()
         {
-            TimeSpan searchInterval = TimeSpan.FromSeconds(60);
+            List<Watcher> watchers = new List<Watcher>();
+            //watchers.Add(new Watcher(4909) { Description = "Crawlers under 3 gold", MaxPricePerUnit = 3, MinStackPrice = 600 });
+            watchers.Add(new Watcher(6132) { Description = "Perfect Roe under 8000 gold", MaxPricePerUnit = 8000 });
+            watchers.Add(new Watcher(511) { Description = "100+ stack Corn Flower under 250 gold each", MaxPricePerUnit = 250, MinStackPrice = 7500 });
+            watchers.Add(new Watcher(211) { Description = "Dreugh Wax under 5000 gold", MaxPricePerUnit = 5000 });
+            watchers.Add(new Watcher(5687) { Description = "Tempering Alloy under 4000 gold", MaxPricePerUnit = 4000 });
 
-            while(true)
+            // White Fish
+            watchers.Add(new Watcher(6268) { Description = "Slaughterfish stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+            watchers.Add(new Watcher(2275) { Description = "Trodh stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+            watchers.Add(new Watcher(1220) { Description = "River Betty stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+            watchers.Add(new Watcher(801) { Description = "Salmon stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+            watchers.Add(new Watcher(941) { Description = "Spadetail stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+            watchers.Add(new Watcher(3482) { Description = "Silverside Perch stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+            watchers.Add(new Watcher(4438) { Description = "Longfin stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+            watchers.Add(new Watcher(5579) { Description = "Dhufish stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
+
+            while (true)
             {
                 Stopwatch searchTime = Stopwatch.StartNew();
-                var crawlers200Under5 = SearchResultsScraper.Scrape("https://us.tamrieltradecentre.com/pc/Trade/SearchResult?ItemID=4909&SearchType=Sell&ItemNamePattern=Crawlers%2C+Foul+Bait&ItemCategory1ID=&ItemTraitID=&ItemQualityID=&IsChampionPoint=false&LevelMin=&LevelMax=&MasterWritVoucherMin=&MasterWritVoucherMax=&AmountMin=200&AmountMax=&PriceMin=&PriceMax=5&SortBy=Price&Order=asc");
-                var perfectRoe1Under5000 = SearchResultsScraper.Scrape("https://us.tamrieltradecentre.com/pc/Trade/SearchResult?ItemID=6132&SearchType=Sell&ItemNamePattern=Perfect+Roe&ItemCategory1ID=&ItemTraitID=&ItemQualityID=&IsChampionPoint=false&LevelMin=&LevelMax=&MasterWritVoucherMin=&MasterWritVoucherMax=&AmountMin=&AmountMax=&PriceMin=&PriceMax=5000&SortBy=Price&Order=asc");
+                //Console.Clear();
+                Console.ForegroundColor = ConsoleColor.White;
+                Console.WriteLine("===========================================================================================");
+                Console.WriteLine($"{DateTime.Now.ToString("hh:mm:ss")} Refreshing items on your watch list ");
+                Console.WriteLine("===========================================================================================");
+                Console.ResetColor();
 
-                Console.WriteLine("Crawlers (Stacks of 200 under 5g each):");
-                foreach(var result in crawlers200Under5)
+                foreach (var watcher in watchers)
                 {
-                    Console.WriteLine(result.ToString());
-                }
-
-                Console.WriteLine("Perfect Roe (Under 5000g each):");
-                foreach (var result in perfectRoe1Under5000)
-                {
-                    Console.WriteLine(result.ToString());
+                    int scrapeDelay = GetScrapeDelay((int)searchInterval.TotalMilliseconds, watchers.Count);
+                    watcher.TryProcessWatcher(scrapeDelay);
                 }
 
                 searchTime.Stop();
-                Thread.Sleep(searchInterval - searchTime.Elapsed);
+                if (searchInterval > searchTime.Elapsed)
+                {
+                    Thread.Sleep(searchInterval - searchTime.Elapsed);
+                }
             }
-
         }
-        
+
+        private int GetScrapeDelay(int searchIntervalMs, int totalWatchers)
+        {
+            int maxDelay = searchIntervalMs / totalWatchers * 2;
+            int delay = new Random().Next(0, maxDelay);
+            return delay;
+        }
+
     }
 }
