@@ -1,5 +1,4 @@
 ﻿using HtmlAgilityPack;
-using InputHelperLibrary;
 using LibAlerts;
 using SiteScraper;
 using System;
@@ -72,7 +71,7 @@ namespace TamrielTradeCentreScraper
                     {
                         if (AttemptRoboCaptcha(captchaNode, url))
                         {
-                            Scrape(url, maxResultCount, scrapeDelayMs);
+                            return Scrape(url, maxResultCount, scrapeDelayMs);
                         }
                     }
                     return results;
@@ -145,11 +144,12 @@ namespace TamrielTradeCentreScraper
         private static bool AttemptRoboCaptcha(HtmlNode captchaNode, string url)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"{DateTime.Now} Opening chrome.exe for CAPTCHA");
+            Console.WriteLine($"{DateTime.Now} Opening browser for CAPTCHA");
             Console.ResetColor();
-            var process = Process.Start(@"chrome.exe", url);
+            Process.Start(url);
             new VoiceSynth().Speak("CAPTCHA time");
             Thread.Sleep(10000);
+            Console.WriteLine($"{DateTime.Now} CAPTCHA done");
             //var firefoxProcess = Process.GetProcessesByName("firefox").FirstOrDefault();
             //WindowsAPI.SwitchWindow(Process.GetCurrentProcess().MainWindowHandle);
             //MouseHelper.SendMouseClickForeground(firefoxProcess.MainWindowHandle, 3348, 328);// 791, 333); 
@@ -201,7 +201,9 @@ namespace TamrielTradeCentreScraper
                                 {
                                     int indexOfColon = textStrings[0].IndexOf(":");
                                     loc.Province = textStrings[0].Substring(0, indexOfColon); 
-                                    loc.City = textStrings[0].Substring(indexOfColon + 1).Trim(); 
+                                    loc.City = textStrings[0].Substring(indexOfColon + 1).Trim();
+                                    loc.Province = System.Web.HttpUtility.HtmlDecode(loc.Province);
+                                    loc.City = System.Web.HttpUtility.HtmlDecode(loc.City);
                                 }
                                 ttcResult.Location = loc;
                                 ttcResult.ShopOwner = textStrings[1];

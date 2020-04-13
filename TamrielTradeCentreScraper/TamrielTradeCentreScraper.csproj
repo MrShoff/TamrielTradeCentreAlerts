@@ -61,10 +61,6 @@
       <Project>{677902E2-AC4F-48BB-BE38-B19DD1E4BF36}</Project>
       <Name>SiteScraper</Name>
     </ProjectReference>
-    <ProjectReference Include="E:\Development\Visual Studio 2019\source\repos\Wolcen_ZeitgeistFarmer\InputHelperLibrary\InputHelperLibrary.csproj">
-      <Project>{A22FC900-CFB3-4521-98A0-257D02461944}</Project>
-      <Name>InputHelperLibrary</Name>
-    </ProjectReference>
   </ItemGroup>
   <ItemGroup>
     <None Include="packages.config" />

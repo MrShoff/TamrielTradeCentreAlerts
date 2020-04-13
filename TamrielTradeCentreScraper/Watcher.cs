@@ -17,31 +17,29 @@ namespace TamrielTradeCentreScraper
         public int LastSeenThresholdMinutes { get; set; } = 90;
         public int MaxResultCount { get; set; } = 40;
         public string Description { get; set; } = "unknown";
+        public bool PauseProcessing { get; set; }
 
         private List<long> _alertsSent = new List<long>();
-        VoiceSynth _voice = new VoiceSynth();
 
         public Watcher(int itemId)
         {
             ItemId = itemId;
         }
 
+        public override string ToString()
+        {
+            return $"{Description}: ItemID: {ItemId}, MaxPricePerUnit: {MaxPricePerUnit}, MinStackPrice: {MinStackPrice}, LastSeenThreshold: {LastSeenThresholdMinutes}, MaxResultCount: {MaxResultCount}";
+        }
+
         public bool TryProcessWatcher(int scrapeDelayMs)
         {
             Stopwatch timer = Stopwatch.StartNew();
-            if (MaxResultCount == 1 && Description == "Robot Test")
+            var scraperResults = SearchResultsScraper.Scrape(GetUrl(), MaxResultCount, scrapeDelayMs);
+            while (PauseProcessing)
             {
-                var scraperResults = SearchResultsScraper.Scrape(GetUrl(), MaxResultCount, scrapeDelayMs);
-                if (scraperResults.Count() != 1)
-                {
-                    return false;
-                }
-                ProcessResults(scraperResults);
+                Thread.Sleep(1000);
             }
-            else
-            {
-                ProcessResults(SearchResultsScraper.Scrape(GetUrl(), MaxResultCount, scrapeDelayMs));
-            }
+            ProcessResults(scraperResults);
             timer.Stop();
             if (scrapeDelayMs > timer.Elapsed.TotalMilliseconds) Thread.Sleep(scrapeDelayMs - (int)timer.Elapsed.TotalMilliseconds);
             return true;
@@ -77,7 +75,7 @@ namespace TamrielTradeCentreScraper
                 Console.Write("   ");
                 if (!_alertsSent.Contains(result.TradeId)) // alert if new
                 {
-                    _voice.Speak($"New {Description} found!");
+                    new VoiceSynth().Speak($"New {Description} found!");
                     _alertsSent.Add(result.TradeId);
                     Console.ForegroundColor = ConsoleColor.Green;
                     Console.Write("NEW! ");
