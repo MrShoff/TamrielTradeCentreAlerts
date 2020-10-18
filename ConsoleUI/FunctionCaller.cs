@@ -13,19 +13,70 @@ namespace ConsoleUI
 {
     class FunctionCaller
     {
-        TimeSpan searchInterval = TimeSpan.FromSeconds(300);
+        private readonly string DefaultWatcherSaveLocation = "state.json";
+
+        TimeSpan searchInterval = TimeSpan.FromSeconds(900);
         bool _watchersPaused = false;
-        List<Watcher> _watchers = new List<Watcher>();
+        List<Watcher> _watchers;
+
+        public void Load(string filepath = null)
+        {
+            try
+            {
+                Console.WriteLine($"Loading state file from {filepath ?? DefaultWatcherSaveLocation}");
+                if (File.Exists(filepath ?? DefaultWatcherSaveLocation))
+                {
+                    string stateJson = File.ReadAllText(filepath ?? DefaultWatcherSaveLocation);
+                    var loadedState = Newtonsoft.Json.JsonConvert.DeserializeObject<SystemState>(stateJson);
+                    _watchers = loadedState.Watchers;
+                    searchInterval = loadedState.SearchInterval;
+                    Console.WriteLine($"Successfully loaded state");
+                    PrintWatchers();
+                }
+                else
+                {
+                    Console.WriteLine($"Could not find {filepath ?? DefaultWatcherSaveLocation}");
+                }                
+            }
+            catch (Exception ex)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+                Console.WriteLine("An error occured during state file load.");
+                Console.ResetColor();
+            }
+        }
 
         public void CallSiteScraper()
-        {
-            //watchers.Add(new Watcher(4909) { Description = "Crawlers under 3 gold", MaxPricePerUnit = 3, MinStackPrice = 600 });
-            _watchers.Add(new Watcher(6132) { Description = "Perfect Roe under 8000 gold", MaxPricePerUnit = 8000 });
-            _watchers.Add(new Watcher(511) { Description = "100+ stack Corn Flower under 250 gold each", MaxPricePerUnit = 250, MinStackPrice = 7500 });
-            _watchers.Add(new Watcher(211) { Description = "Dreugh Wax under 5000 gold", MaxPricePerUnit = 5000 });
-            _watchers.Add(new Watcher(5687) { Description = "Tempering Alloy under 4000 gold", MaxPricePerUnit = 4000 });
+        {            
+            Load();
+            if (_watchers == null)
+            {
+                _watchers = new List<Watcher>();
+            }
+            if (_watchers.Count == 0)
+            {
+                Console.WriteLine("Entering new user setup");
+                DoUserCommandConsole();
+            }
+            var initialInterval = searchInterval;
+            searchInterval = TimeSpan.FromMinutes(2);
+            //_watchers.Add(new Watcher(new Uri("https://us.tamrieltradecentre.com/pc/Trade/SearchResult?ItemID=&SearchType=Sell&ItemNamePattern=&ItemCategory1ID=5&ItemCategory2ID=24&ItemTraitID=&ItemQualityID=&IsChampionPoint=false&LevelMin=&LevelMax=&MasterWritVoucherMin=&MasterWritVoucherMax=&AmountMin=200&AmountMax=&PriceMin=&PriceMax=2.5"))
+            //    { Description = "Bait Stack under 500 gold" });
+
+            //_watchers.Add(new Watcher(new Uri("https://us.tamrieltradecentre.com/pc/Trade/SearchResult?SearchType=Sell&ItemID=&ItemNamePattern=&IsChampionPoint=false&LevelMin=&LevelMax=&ItemCategory1ID=5&ItemCategory2ID=29&ItemCategory3ID=&ItemQualityID=&ItemTraitID=&PriceMin=&PriceMax=100&MasterWritVoucherMin=&MasterWritVoucherMax=&AmountMin=100&AmountMax="))
+            //    { Description = "White Fish stacks under 100g" });
+
+            //_watchers.Add(new Watcher(new Uri("https://us.tamrieltradecentre.com/pc/Trade/SearchResult?ItemID=&SearchType=Sell&ItemNamePattern=&ItemCategory1ID=1&ItemCategory2ID=6&ItemCategory3ID=&ItemTraitID=15&ItemQualityID=&IsChampionPoint=false&LevelMin=&LevelMax=&MasterWritVoucherMin=&MasterWritVoucherMax=&AmountMin=&AmountMax=&PriceMin=&PriceMax=200"))
+            //    { Description = "5 Intricate Jewelry under 200 gold", Stackable = false, MaxResultCount = 200, MinItemCount = 5, LastSeenThresholdMinutes = 120 });
+
+            //_watchers.Add(new Watcher(6132) { Description = "Perfect Roe under 8000 gold", MaxPricePerUnit = 8000 });
+            //_watchers.Add(new Watcher(511) { Description = "50+ stack Corn Flower under 300 gold each", MaxPricePerUnit = 300, MinStackSize = 50 });
+            //_watchers.Add(new Watcher(211) { Description = "Dreugh Wax under 5000 gold", MaxPricePerUnit = 5000 });
+            //_watchers.Add(new Watcher(5687) { Description = "Tempering Alloy under 4000 gold", MaxPricePerUnit = 4000 });
+            //_watchers.Add(new Watcher(17523) { Description = "Powdered Mother of Pearl under 2000 gold", MaxPricePerUnit = 2000, MinStackSize = 5 });
 
             // White Fish
+            /*
             _watchers.Add(new Watcher(6268) { Description = "Slaughterfish stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
             _watchers.Add(new Watcher(2275) { Description = "Trodh stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
             _watchers.Add(new Watcher(1220) { Description = "River Betty stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
@@ -34,7 +85,8 @@ namespace ConsoleUI
             _watchers.Add(new Watcher(3482) { Description = "Silverside Perch stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
             _watchers.Add(new Watcher(4438) { Description = "Longfin stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
             _watchers.Add(new Watcher(5579) { Description = "Dhufish stacks", MaxPricePerUnit = 100, MinStackPrice = 10000 });
-
+            */
+            int refreshCount = 0;
             while (true)
             {
                 Stopwatch searchTime = Stopwatch.StartNew();
@@ -65,10 +117,27 @@ namespace ConsoleUI
                 {
                     Thread.Sleep(searchInterval - searchTime.Elapsed);
                 }
-
-                string serializedWatchers = Newtonsoft.Json.JsonConvert.SerializeObject(_watchers);
-                File.WriteAllText("watchers.txt", serializedWatchers);                
+                refreshCount++;
+                if (refreshCount == 1) // first refresh is 2 minutes, then reset to standard interval
+                {
+                    searchInterval = initialInterval;
+                }
             }
+        }
+
+        private void Save(string filepath = null)
+        {
+            try
+            {
+                string serializedWatchers = Newtonsoft.Json.JsonConvert.SerializeObject(new SystemState() { SearchInterval = searchInterval, Watchers = _watchers });
+                File.WriteAllText(filepath ?? DefaultWatcherSaveLocation, serializedWatchers);
+                Console.WriteLine("State saved");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("An error occured during Save");
+            }
+          
         }
 
         private void ListenForUserInput()
@@ -81,6 +150,7 @@ namespace ConsoleUI
 
             foreach (var watcher in _watchers) { watcher.PauseProcessing = false; }
             _watchersPaused = false;
+            Save();
             ListenForUserInput();
         }
 
@@ -88,15 +158,17 @@ namespace ConsoleUI
         {
             Console.BackgroundColor = ConsoleColor.DarkBlue;
             Console.WriteLine("===========================================================================================");
-            Console.WriteLine($"User input detected - pausing watchers. Please enter one of the following commands");
+            Console.WriteLine($"Console command menu. Please enter one of the following commands");
             Console.WriteLine("===========================================================================================");
             string input = string.Empty;
             while (input != "c" && input != "q")
             {
                 Console.WriteLine("c,q - Quit command console and continue processing watchers");
                 Console.WriteLine("add,addwatcher - Add a new item watcher to the list");
-                Console.WriteLine("remove,removewatcher - Remove a watcher from the list");
-                Console.WriteLine("view,viewwatchers - View the list of active watchers");
+                Console.WriteLine("remove - Remove a watcher from the list");
+                Console.WriteLine("view - View the list of active watchers");
+                Console.WriteLine("setRefreshInterval - View and set the refresh interval");
+                Console.WriteLine("wishIwerePlayingAC - Me too.");
 
                 Console.Write("User input: ");
                 input = Console.ReadLine().ToLower();
@@ -136,6 +208,22 @@ namespace ConsoleUI
                     case "viewwatchers":
                         PrintWatchers();
                         break;
+                    case "setrefreshinterval":
+                        Console.WriteLine($"Current refresh interval: {searchInterval.TotalMinutes} minutes");
+                        Console.Write("Enter desired refresh interval in minutes: ");
+                        string userInput = Console.ReadLine();
+                        double dblOutput;
+                        while (!double.TryParse(userInput, out dblOutput))
+                        {
+                            Console.Write("Search interval needs to be a positive number. Search interval: ");
+                            userInput = Console.ReadLine();
+                        }
+                        if (dblOutput >= 0.0)
+                        {
+                            searchInterval = TimeSpan.FromMinutes(dblOutput);
+                            Console.WriteLine($"Done. Refresh interval set to: {searchInterval.TotalMinutes} minutes");
+                        }
+                        break;
                     default:
                         Console.WriteLine($"{input} is not a recognized command");
                         break;
@@ -153,58 +241,57 @@ namespace ConsoleUI
             int integerOutput;
 
             // Get ItemID
-            Console.Write("ItemID: ");
+            Console.Write("ItemID or Search URL: ");
             userInput = Console.ReadLine();
             while (!int.TryParse(userInput, out integerOutput))
             {
-                Console.Write("ItemID needs to be an integer. ItemID: ");
+                if (Uri.TryCreate(userInput, UriKind.Absolute, out Uri uriOutput))
+                {
+                    newWatcher = new Watcher(uriOutput);
+                    break;
+                }
+                Console.Write("Couldn't read ItemID or Search URL. Try again. ItemID or Search URL: ");
                 userInput = Console.ReadLine();
             }
-            newWatcher = new Watcher(integerOutput);
+            newWatcher = newWatcher ?? new Watcher(integerOutput);
 
             // Get Description
             Console.Write("Description: ");
             newWatcher.Description = Console.ReadLine();
 
-            // Get LastSeenThresholdMinutes
-            Console.Write("LastSeenThresholdMinutes: ");
-            userInput = Console.ReadLine();
-            while (!int.TryParse(userInput, out integerOutput))
+            if (newWatcher.SearchUrl == null)
             {
-                Console.Write("LastSeenThresholdMinutes needs to be an integer. LastSeenThresholdMinutes: ");
+                // Get LastSeenThresholdMinutes
+                Console.Write("LastSeenThresholdMinutes: ");
                 userInput = Console.ReadLine();
-            }
-            newWatcher.LastSeenThresholdMinutes = integerOutput;
+                while (!int.TryParse(userInput, out integerOutput))
+                {
+                    Console.Write("LastSeenThresholdMinutes needs to be an integer. LastSeenThresholdMinutes: ");
+                    userInput = Console.ReadLine();
+                }
+                newWatcher.LastSeenThresholdMinutes = integerOutput;
 
-            // Get MaxPricePerUnit
-            Console.Write($"MaxPricePerUnit: ");
-            userInput = Console.ReadLine();
-            while (!int.TryParse(userInput, out integerOutput))
-            {
-                Console.Write("MaxPricePerUnit needs to be an integer. MaxPricePerUnit: ");
+                // Get MaxPricePerUnit
+                Console.Write($"MaxPricePerUnit: ");
                 userInput = Console.ReadLine();
-            }
-            newWatcher.MaxPricePerUnit = integerOutput > 9999999 ? 9999999 : integerOutput;
+                while (!int.TryParse(userInput, out integerOutput))
+                {
+                    Console.Write("MaxPricePerUnit needs to be a number. MaxPricePerUnit: ");
+                    userInput = Console.ReadLine();
+                }
+                newWatcher.MaxPricePerUnit = integerOutput > 9999999 ? 9999999 : integerOutput;
 
-            // Get MaxResultCount
-            Console.Write("MaxResultCount: ");
-            userInput = Console.ReadLine();
-            while (!int.TryParse(userInput, out integerOutput))
-            {
-                Console.Write("MaxResultCount needs to be an integer. MaxResultCount: ");
+                // Get MinStackPrice
+                Console.Write("MinStackSize: ");
                 userInput = Console.ReadLine();
+                while (!int.TryParse(userInput, out integerOutput))
+                {
+                    Console.Write("MinStackPrice needs to be an integer. MinStackSize: ");
+                    userInput = Console.ReadLine();
+                }
+                newWatcher.MinStackSize = integerOutput < 1 ? 1 : integerOutput > 1000 ? 1000 : integerOutput;
             }
-            newWatcher.MaxResultCount = integerOutput > 40 ? 40 : integerOutput;
-
-            // Get MinStackPrice
-            Console.Write("MinStackPrice: ");
-            userInput = Console.ReadLine();
-            while (!int.TryParse(userInput, out integerOutput))
-            {
-                Console.Write("MinStackPrice needs to be an integer. MinStackPrice: ");
-                userInput = Console.ReadLine();
-            }
-            newWatcher.MinStackPrice = integerOutput < 0 ? 0 : integerOutput > 9999999 ? 9999999 : integerOutput;
+            
 
             return newWatcher;
         }

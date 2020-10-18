@@ -1,5 +1,8 @@
 ﻿using HtmlAgilityPack;
 using LibAlerts;
+using OpenQA.Selenium;
+using OpenQA.Selenium.Chrome;
+using OpenQA.Selenium.Interactions;
 using SiteScraper;
 using System;
 using System.Collections.Generic;
@@ -13,39 +16,16 @@ namespace TamrielTradeCentreScraper
 {
     public static class SearchResultsScraper
     {
-        public static IEnumerable<Result> Scrape(string url, int maxResultCount = 40, int scrapeDelayMs = 0)
+        static DateTime lastCaptcha = new DateTime();
+        
+        public static IEnumerable<Result> Scrape(string url, int ageLimitMinutes, int maxResultCount, int scrapeDelayMs)
         {
             List<Result> results = new List<Result>();
 
-            // get top results from both directions, since you can only order by max price
-            /*
-            string urlAsc, urlDesc;
-            if (url.Contains("&SortBy=Price&Order="))
+            if (!url.Contains("&SortBy=LastSeen&Order=desc"))
             {
-                if (url.Contains("&SortBy=Price&Order=asc"))
-                {
-                    urlAsc = url;
-                    urlDesc = url.Replace("&SortBy=Price&Order=asc", "&SortBy=Price&Order=desc");
-                }
-                else if (url.Contains("&SortBy=Price&Order=desc"))
-                {
-
-                    urlAsc = url.Replace("&SortBy=Price&Order=desc", "&SortBy=Price&Order=asc");
-                    urlDesc = url;
-                }
-                else
-                {
-                    throw new Exception("wtf?");
-                }
+                url = $"{url}&SortBy=LastSeen&Order=desc";
             }
-            else
-            {
-                urlAsc = $"{url}&SortBy=Price&Order=asc";
-                urlDesc = $"{url}&SortBy=Price&Order=desc";
-            }
-            */
-
-            if (!url.Contains("&SortBy=Price&Order=asc")) { url = $"{url}&SortBy=Price&Order=asc"; }
 
             if (Uri.TryCreate(url, UriKind.Absolute, out Uri searchUriAsc))
             {
@@ -55,23 +35,23 @@ namespace TamrielTradeCentreScraper
                 {
                     int pagesToScrape = maxResultCount / 10;
                     delay = pagesToScrape > 0 ? scrapeDelayMs / pagesToScrape : scrapeDelayMs;
-                    //Console.ForegroundColor = ConsoleColor.DarkGray;
-                    //Console.WriteLine($"{pagesToScrape} pages to scrape. Delaying each call in this search by {delay.ToString("#,##0")}ms.");
-                    //Console.ResetColor();
                 }
                 Thread.Sleep(delay);
-                var docAsc = Scraper.GetHtmlDoc(searchUriAsc);
-                var searchResultNodesAsc = Scraper.GetChildNodes(docAsc, searchResultsNodesXPath);
+
+                //GetProxies.FromFreeProxyListNet();
+                var siteScraper = new Scraper();
+                var docAsc = siteScraper.TryLoadHtmlDocument(searchUriAsc);
+                var searchResultNodesAsc = siteScraper.GetChildNodes(searchResultsNodesXPath);
 
                 if (searchResultNodesAsc == null)
                 {
                     string captchaXpath = "/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/form/div/div";
-                    var captchaNode = Scraper.GetNode(docAsc, captchaXpath);
+                    var captchaNode = siteScraper.GetNode(captchaXpath);
                     if (captchaNode != null)
                     {
-                        if (AttemptRoboCaptcha(captchaNode, url))
+                        if (PromptUserForCaptcha(url))
                         {
-                            return Scrape(url, maxResultCount, scrapeDelayMs);
+                            return Scrape(url, ageLimitMinutes, maxResultCount, scrapeDelayMs);
                         }
                     }
                     return results;
@@ -79,16 +59,6 @@ namespace TamrielTradeCentreScraper
 
                 List<HtmlNode> nodesToParse = new List<HtmlNode>();
                 nodesToParse.AddRange(from srn in searchResultNodesAsc where srn.GetClasses().Contains("cursor-pointer") select srn);
-
-                /*
-                if (maxResultCount > 10 && nodesToParse.Count == 10)
-                {
-                    Thread.Sleep(delay);
-                    var docDesc = Scraper.GetHtmlDoc(searchUriDesc);
-                    var searchResultNodesDesc = Scraper.GetChildNodes(docAsc, searchResultsNodesXPath);
-                    nodesToParse.AddRange(from srn in searchResultNodesDesc where srn.GetClasses().Contains("cursor-pointer") select srn);
-                }
-                */
 
                 if (nodesToParse.Count > maxResultCount) 
                 { 
@@ -112,8 +82,15 @@ namespace TamrielTradeCentreScraper
 
                 if (results.Count < maxResultCount && results.Count == 10)
                 {
+                    if (url.Contains("&SortBy=LastSeen&Order=desc"))
+                    {
+                        if ((from r in results where DateTime.Now.Subtract(r.LastSeen).TotalMinutes >= ageLimitMinutes select r).Count() > 0)
+                        {
+                            return results;
+                        }
+                    }
                     // check for more pages of results
-                    var paginationNodes = Scraper.GetChildNodes(docAsc, "/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/div[3]/ul");
+                    var paginationNodes = siteScraper.GetChildNodes("/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/div[3]/ul");
                     foreach (var lineItemNode in paginationNodes) // look at all LIs
                     {
                         if (lineItemNode.HasChildNodes)
@@ -125,7 +102,7 @@ namespace TamrielTradeCentreScraper
                                     if (childNode.Attributes.Contains("href"))
                                     {
                                         string nextPageUrl = childNode.Attributes["href"].Value.Replace("amp;", "");
-                                        results.AddRange(Scrape(nextPageUrl, maxResultCount - results.Count, scrapeDelayMs - delay));
+                                        results.AddRange(Scrape(nextPageUrl, ageLimitMinutes, maxResultCount - results.Count, scrapeDelayMs - delay));
                                     }
                                 }
                             }
@@ -141,25 +118,76 @@ namespace TamrielTradeCentreScraper
             }
         }
 
-        private static bool AttemptRoboCaptcha(HtmlNode captchaNode, string url)
+        private static bool PromptUserForCaptcha(string url)
         {
-            Console.ForegroundColor = ConsoleColor.Yellow;
-            Console.WriteLine($"{DateTime.Now} Opening browser for CAPTCHA");
-            Console.ResetColor();
-            Process.Start(url);
-            new VoiceSynth().Speak("CAPTCHA time");
-            Thread.Sleep(10000);
-            Console.WriteLine($"{DateTime.Now} CAPTCHA done");
-            //var firefoxProcess = Process.GetProcessesByName("firefox").FirstOrDefault();
-            //WindowsAPI.SwitchWindow(Process.GetCurrentProcess().MainWindowHandle);
-            //MouseHelper.SendMouseClickForeground(firefoxProcess.MainWindowHandle, 3348, 328);// 791, 333); 
-            //Thread.Sleep(2000);
-            //MouseHelper.SendMouseClickForeground(firefoxProcess.MainWindowHandle, 3354, 400);// 798, 408);
-            //MouseHelper.SendMouseClick(firefoxProcess.MainWindowHandle, 3348, 328);// 791, 333); 
-            //Thread.Sleep(3000);
-            //MouseHelper.SendMouseClick(firefoxProcess.MainWindowHandle, 3354, 400);// 798, 408);
-            //Thread.Sleep(1000);
+            if (lastCaptcha > DateTime.Now.Subtract(TimeSpan.FromSeconds(15)))
+            {
+                Console.WriteLine($"Waiting for user to do CAPTCHA");
+                new VoiceSynth().Speak("CAPTCHA time");
+                Thread.Sleep(10000);
+            }
+            else
+            {
+
+                Console.ForegroundColor = ConsoleColor.Yellow;
+                Console.WriteLine($"{DateTime.Now} Opening browser for CAPTCHA");
+                Console.ResetColor();            
+                Process.Start(url);
+                new VoiceSynth().Speak("CAPTCHA time");
+                Thread.Sleep(10000);
+            }
+
+            lastCaptcha = DateTime.Now;
             return true;
+        }
+
+        private static void AttemptRoboCaptcha(string url)
+        {            
+            using (var driver = new ChromeDriver(@"C:\Program Files (x86)\ChromeDriver"))
+            {
+                // navigate to the page with the captcha
+                Uri captchaUri = new Uri(url);
+                driver.Navigate().GoToUrl(captchaUri);
+
+                // wait for captcha to load
+                driver.Manage().Timeouts().ImplicitWait = TimeSpan.FromSeconds(30);
+
+                // get captcha frame
+                var iFrame = driver.FindElement(By.XPath("/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/form/div/div/div/div/iframe"));
+                driver.SwitchTo().Frame(iFrame);
+
+                // Now can click on checkbox of reCaptcha now.
+                Thread.Sleep(1300);
+                var captchaCheckBox = driver.FindElement(By.XPath("/html/body/div[2]/div[3]/div[1]/div/div/span/div[1]"));
+
+                CaptchaElement.DoMouseClick(149, 704);
+                Thread.Sleep(20000); // wait for click on captcha to validate
+
+                try
+                {
+                    // click confirm
+                    driver.SwitchTo().ParentFrame();
+                    var submitElement = driver.FindElementByCssSelector("/html/body/div[2]/table/tbody/tr[3]/td[2]/section/div/form/input[20]"); // submit
+                    submitElement.Click();
+                }
+                catch (InvalidSelectorException ex)
+                {
+                    // solve further challenges
+                    var imageSelectoriFrame = driver.FindElement(By.XPath("/html/body/div[3]/div[4]/iframe"));
+                    driver.SwitchTo().Frame(imageSelectoriFrame);
+                    var challengeText = driver.FindElement(By.XPath("/html/body/div/div/div[2]/div[1]/div[1]/div")).Text.Split(Environment.NewLine.ToCharArray());
+                    Console.WriteLine(challengeText);
+                    if (challengeText.Contains("Select all squares with") || challengeText.Contains("Select all images with"))
+                    {
+                        string selectType = challengeText[2];
+                        // review images, select the appropriate ones
+                    }
+                    else
+                    {
+                        throw new NotImplementedException($"Handling of challenge '{challengeText}' not yet implemented.");
+                    }
+                }
+            }
         }
 
         private static Result ReadFieldSet(IEnumerable<HtmlNodeField> fieldSet)
@@ -213,8 +241,6 @@ namespace TamrielTradeCentreScraper
                     case "Price":
                         if (textStrings != null)
                         {
-                            ttcResult.Trader = textStrings.Length > 0 ? textStrings[0].Trim() : string.Empty;
-                            // TODO: parse price
                             string ppu = textStrings.Length > 0 ? textStrings[0] : string.Empty;
                             string stack = textStrings.Length > 3 ? textStrings[2] : string.Empty;
                             ttcResult.PricePerUnit = decimal.Parse(ppu);
